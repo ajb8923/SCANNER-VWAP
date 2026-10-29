@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Scanner VWAP</title>
+<style>
+:root{--bg:#060d1a;--card:#0d1829;--line:#1c2a42;--txt:#e6edf7;--mut:#7f8ea8;--up:#22c55e;--dn:#ef4444;--acc:#3b82f6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:15px -apple-system,system-ui,sans-serif;padding:calc(env(safe-area-inset-top) + 8px) 14px 30px}
+h1{font-size:20px;margin:6px 0 2px}h2{font-size:16px;margin:22px 0 0}
+.mut{color:var(--mut);font-size:13px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 0}
+.bar button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:14px}
+.bar button.on{background:var(--acc);border-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 10px;margin-top:12px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--mut);font-weight:500}
+.C{color:var(--up);font-weight:600}.V{color:var(--dn);font-weight:600}
+.dot{display:inline-block;width:14px;height:14px;border-radius:4px}.A{background:var(--up)}.B{background:var(--dn)}
+</style></head><body>
+<h1>Scanner VWAP · SMA 6</h1>
+<div class="mut" id="upd">Cargando…</div>
+<div class="bar" id="tfs"></div>
+<div class="bar" id="dirs"></div>
+<div class="card"><table>
+<thead><tr><th>Vela (Londres)</th><th>Ticker</th><th>TF</th><th>Señal</th><th>Precio</th><th>SMA 6</th><th>VWAP</th></tr></thead>
+<tbody id="sig"></tbody></table></div>
+<h2>Estado actual <span class="mut">(verde = SMA 6 sobre VWAP)</span></h2>
+<div class="card"><table id="est"></table></div>
+<script>
+const TFS=["5m","15m","30m","1h","4h"];let D=null,tf="Todas",dir="Todas",offline=false;
+function btns(id,opts,cur,set){const el=document.getElementById(id);el.innerHTML="";
+ opts.forEach(o=>{const b=document.createElement("button");b.textContent=o;if(o===cur)b.className="on";
+ b.onclick=()=>{set(o);render()};el.appendChild(b)})}
+function render(){
+ btns("tfs",["Todas",...TFS],tf,v=>tf=v);
+ btns("dirs",["Todas","COMPRA","VENDE"],dir,v=>dir=v);
+ if(!D)return;
+ document.getElementById("upd").textContent="Actualizado: "+D.actualizado+(offline?" · sin conexión (datos guardados)":"");
+ const s=D.senales.filter(x=>(tf==="Todas"||x.tf===tf)&&(dir==="Todas"||x.senal===dir)).slice().reverse();
+ document.getElementById("sig").innerHTML=s.length?s.map(x=>`<tr><td>${x.hora}</td><td><b>${x.ticker}</b></td><td>${x.tf}</td><td class="${x.senal[0]}">${x.senal}</td><td>${x.precio}</td><td>${x.sma}</td><td>${x.vwap}</td></tr>`).join(""):`<tr><td colspan="7" class="mut">Sin señales</td></tr>`;
+ const tk=Object.keys(D.estado).sort();
+ document.getElementById("est").innerHTML="<tr><th>Ticker</th>"+TFS.map(t=>`<th>${t}</th>`).join("")+"</tr>"+
+  tk.map(k=>"<tr><td><b>"+k+"</b></td>"+TFS.map(t=>{const v=D.estado[k][t];
+   return `<td>${v?`<span class="dot ${v==="ARRIBA"?"A":"B"}"></span>`:"–"}</td>`}).join("")+"</tr>").join("");
+}
+async function load(){
+ try{const r=await fetch("signals.json?t="+Date.now());if(!r.ok)throw 0;D=await r.json();offline=false;
+  try{localStorage.setItem("svwap",JSON.stringify(D))}catch(e){}}
+ catch(e){try{const c=localStorage.getItem("svwap");if(c){D=JSON.parse(c);offline=true}}catch(_){}}
+ render();
+}
+load();setInterval(load,60000);
+</script></body></html>
