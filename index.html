@@ -1,55 +1,467 @@
 <!DOCTYPE html>
-<html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scanner VWAP">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#060d1a">
 <title>Scanner VWAP</title>
 <style>
-:root{--bg:#060d1a;--card:#0d1829;--line:#1c2a42;--txt:#e6edf7;--mut:#7f8ea8;--up:#22c55e;--dn:#ef4444;--acc:#3b82f6}
+:root{--bg:#060d1a;--panel:#0b1628;--line:#18273f;--text:#dce6f3;--muted:#7d8ea8;--long:#3fd492;--short:#ff6b7a;--warn:#f2b84b;--s6:#ffffff;--vw:#ff9f1a;--acc:#3d8bff;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:15px -apple-system,system-ui,sans-serif;padding:calc(env(safe-area-inset-top) + 8px) 14px 30px}
-h1{font-size:20px;margin:6px 0 2px}h2{font-size:16px;margin:22px 0 0}
-.mut{color:var(--mut);font-size:13px}
-.bar{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 0}
-.bar button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:14px}
-.bar button.on{background:var(--acc);border-color:var(--acc)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 10px;margin-top:12px;overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
-th{color:var(--mut);font-weight:500}
-.C{color:var(--up);font-weight:600}.V{color:var(--dn);font-weight:600}
-.dot{display:inline-block;width:14px;height:14px;border-radius:4px}.A{background:var(--up)}.B{background:var(--dn)}
-</style></head><body>
-<h1>Scanner VWAP · SMA 6</h1>
-<div class="mut" id="upd">Cargando…</div>
-<div class="bar" id="tfs"></div>
-<div class="bar" id="dirs"></div>
-<div class="card"><table>
-<thead><tr><th>Vela (Londres)</th><th>Ticker</th><th>TF</th><th>Señal</th><th>Precio</th><th>SMA 6</th><th>VWAP</th></tr></thead>
-<tbody id="sig"></tbody></table></div>
-<h2>Estado actual <span class="mut">(verde = SMA 6 sobre VWAP)</span></h2>
-<div class="card"><table id="est"></table></div>
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1200px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px}
+h1{margin:0;font-size:26px;font-weight:650;letter-spacing:-.01em}
+.trio{display:flex;gap:4px;margin-top:6px}.trio span{height:3px;width:34px;border-radius:2px}
+.sub{color:var(--muted);font-size:13px;margin-top:6px}
+button,select,input{font:inherit;color:var(--text)}
+.btn{background:#163563;border:1px solid #2c5596;border-radius:10px;padding:9px 16px;cursor:pointer}
+.btn:disabled{opacity:.5}
+.status{font-size:13px;color:var(--muted);margin-top:6px;max-width:520px}
+.bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:8px 0 14px}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:120px;cursor:pointer;text-align:left}
+.stat b{display:block;font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:8px 12px;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--text)}
+#segTF button.on{background:#163563;color:#fff}
+select,input[type=search]{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:13px;background:#08121f;cursor:pointer;user-select:none;-webkit-user-select:none}th:hover{color:var(--text)}th.on{color:var(--text)}th .ar{font-size:10px;margin-left:4px}
+.zoom{display:flex;gap:6px;align-items:center;margin-top:10px}.zoom button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 12px;cursor:pointer;font-size:15px}.zoom span{font-size:12px;color:var(--muted);margin-left:6px}
+tr.row{cursor:pointer}tr.row:hover td{background:#0a1526}
+tr.sel td{background:#0d1d36}
+tr.drow>td{padding:0;white-space:normal;background:#081324}
+.detail{position:sticky;left:0;width:calc(100vw - 34px);max-width:1168px;padding:14px}
+.detail h2{margin:0 0 2px;font-size:19px}
+.tk{font-weight:600}.sec{color:var(--muted);font-size:12px;display:block}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:13px;font-weight:600}
+.L{color:var(--long);background:rgba(63,212,146,.12)}.S{color:var(--short);background:rgba(255,107,122,.12)}
+.sig{font-weight:700}
+.pos{color:var(--long)}.neg{color:var(--short)}.mut{color:var(--muted)}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+canvas{width:100%;height:360px;display:block;margin:8px 0 6px;touch-action:pan-y;cursor:crosshair}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap;margin-bottom:12px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.trades{min-width:0}
+details{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+summary{cursor:pointer;font-weight:600}
+.note{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Scanner VWAP</h1>
+    <div class="trio" aria-hidden="true"><span style="background:var(--s6)"></span><span style="background:var(--vw)"></span></div>
+    <div class="sub">Cruce de la SMA 6 con el VWAP · al alza compra, a la baja vende · horas de Londres</div>
+  </div>
+  <div style="text-align:right">
+    <button class="btn" id="reload">Recargar datos</button>
+    <div class="status" id="status">Cargando datos…</div>
+  </div>
+</header>
+<div class="bar"><i id="prog"></i></div>
+<div class="controls">
+  <div class="seg" id="segTF">
+    <button data-v="5m">5 min</button><button data-v="15m">15 min</button><button data-v="30m">30 min</button><button data-v="1h">1 hora</button><button data-v="4h">4 horas</button>
+  </div>
+</div>
+<div class="stats" id="stats"></div>
+<div class="controls">
+  <div class="seg" id="segEstado">
+    <button data-v="all" class="on">Todos</button>
+    <button data-v="sig">Señal última vela</button>
+    <button data-v="rec">Últimas 5 velas</button>
+    <button data-v="L">En largo</button>
+    <button data-v="S">En corto</button>
+  </div>
+  <select id="fSector" aria-label="Sector"></select>
+  <input type="search" id="fText" placeholder="Buscar ticker" aria-label="Buscar ticker">
+</div>
+<div class="tablebox">
+  <table>
+    <thead><tr id="thead"><th data-k="tk">Ticker</th><th data-k="close">Último</th><th data-k="day">Día</th><th data-k="pos">Estado</th><th data-k="sig">Señal</th><th data-k="entry">Entrada</th><th data-k="ret">Resultado</th><th data-k="vw">vs VWAP</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+</div>
+<details>
+  <summary>Cómo funciona</summary>
+  <div class="note">
+    GitHub ejecuta el escáner cada 5 minutos con el mercado USA abierto (lunes a viernes) y te envía las señales nuevas por Telegram. La web puede tardar hasta 5 minutos más en mostrarlas.<br>
+    Señal de COMPRA cuando la SMA 6 corta el VWAP al alza y de VENTA cuando lo corta a la baja, siempre sobre velas cerradas. Cada señal cierra la operación anterior y abre la contraria.<br>
+    VWAP diario en 5 min, 15 min, 30 min y 1 hora, y semanal en 4 horas. Los cruces provocados por el reinicio del VWAP no cuentan.<br>
+    Para actualizar en cualquier momento: en GitHub, pestaña Actions, Scanner VWAP, Run workflow. Para cambiar los tickers: edita TICKERS al principio de <b>scanner_vwap.py</b>.
+  </div>
+</details>
+</div>
 <script>
-const TFS=["5m","15m","30m","1h","4h"];let D=null,tf="Todas",dir="Todas",offline=false;
-function btns(id,opts,cur,set){const el=document.getElementById(id);el.innerHTML="";
- opts.forEach(o=>{const b=document.createElement("button");b.textContent=o;if(o===cur)b.className="on";
- b.onclick=()=>{set(o);render()};el.appendChild(b)})}
+const $ = id => document.getElementById(id);
+function load(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }
+function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
+const TZ = "Europe/London", SMA_N = 6, TFS = ["5m","15m","30m","1h","4h"];
+const TFN = {"5m":"5 min","15m":"15 min","30m":"30 min","1h":"1 hora","4h":"4 horas"};
+const fmtDT = ts => new Date(ts*1000).toLocaleString("es-ES",{timeZone:TZ,day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}).replace(",", "");
+const fmtP = v => v == null ? "—" : (v >= 1000 ? v.toLocaleString("es-ES",{maximumFractionDigits:0}) : v.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2}));
+const fmtPct = v => v == null ? "—" : (v >= 0 ? "+" : "") + (v*100).toFixed(2).replace(".", ",") + "%";
+const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
+const nyFmt = new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York"});
+const nyDay = ts => nyFmt.format(new Date(ts*1000));
+
+const OWNER = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : null;
+const REPO = location.pathname.split("/").filter(Boolean)[0];
+const DATA_URL = OWNER && REPO ? "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/data/data.json" : "data.json";
+
+let DATA = null, OFF = false, lastLoad = 0, loading = false;
+let ui = {tf: TFS.includes(load("svwapTF")) ? load("svwapTF") : "5m", estado:"all", sector:"all", text:"", sel:null, sort:null, dir:1};
+let VIEW = {key:null};
+let results = [];
+
+async function loadData(quiet){
+  if (loading) return; loading = true;
+  $("reload").disabled = true;
+  if (!quiet) { $("status").textContent = "Cargando datos…"; $("prog").style.width = "30%"; }
+  const prevUpd = DATA && DATA.updated;
+  let offline = false;
+  try {
+    const r = await fetch(DATA_URL + "?v=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status === 404 ? "nodata" : "HTTP " + r.status);
+    DATA = await r.json();
+    if (r.headers.get("X-SW-Cache")) offline = true; else save("svwapData", DATA);
+  } catch(e) {
+    const saved = DATA || load("svwapData");
+    if (saved) { DATA = saved; offline = true; }
+    else {
+      loading = false; $("reload").disabled = false; $("prog").style.width = "0";
+      $("status").textContent = e.message === "nodata"
+        ? "Todavía no hay datos. En GitHub, ve a Actions, Scanner VWAP y pulsa Run workflow."
+        : "No se pudieron cargar los datos (" + e.message + "). Comprueba la conexión.";
+      return;
+    }
+  }
+  loading = false; lastLoad = Date.now(); OFF = offline;
+  $("prog").style.width = "100%"; setTimeout(() => { $("prog").style.width = "0"; }, 600);
+  $("reload").disabled = false;
+  showStatus();
+  if (quiet && prevUpd === DATA.updated) return;
+  const secs = [...new Set(DATA.tickers.map(x => x.sec))];
+  $("fSector").innerHTML = '<option value="all">Todos los sectores</option>' + secs.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+  $("fSector").value = secs.includes(ui.sector) ? ui.sector : "all";
+  compute();
+}
+function showStatus(){
+  if (!DATA) return;
+  const when = new Date(Date.parse(DATA.updated)).toLocaleString("es-ES",{timeZone:TZ,day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}).replace(",", "");
+  const b = (DATA.d && DATA.d[ui.tf]) || {};
+  let lastT = 0, nErr = 0;
+  for (const k in b) { if (b[k].err) nErr++; else if (b[k].t && b[k].t.length) lastT = Math.max(lastT, b[k].t[b[k].t.length-1]); }
+  $("status").textContent = "Actualizado el " + when + (lastT ? ". Última vela de " + TFN[ui.tf] + ": " + fmtDT(lastT) : "") + (nErr ? ". " + nErr + " sin datos" : "") + (OFF ? ". Sin conexión: mostrando la última copia guardada" : "");
+}
+
+function sma(a, p){
+  const o = new Array(a.length).fill(null); let s = 0;
+  for (let i = 0; i < a.length; i++) { s += a[i]; if (i >= p) s -= a[i-p]; if (i >= p-1) o[i] = s/p; }
+  return o;
+}
+function analyze(x){
+  const {t, o, h, l, c, vw, p} = x, n = c.length;
+  const s6 = sma(c, SMA_N), sig = new Array(n).fill(""), trades = [];
+  let pos = 0;
+  for (let i = 1; i < n; i++) {
+    if (s6[i] == null || s6[i-1] == null || p[i] !== p[i-1]) continue;
+    const up = s6[i-1] <= vw[i-1] && s6[i] > vw[i];
+    const dn = s6[i-1] >= vw[i-1] && s6[i] < vw[i];
+    if (up) { sig[i] = "COMPRA"; if (pos !== 1) { if (pos === -1) trades[trades.length-1].out = i; pos = 1; trades.push({dir:1, in:i}); } }
+    else if (dn) { sig[i] = "VENDE"; if (pos !== -1) { if (pos === 1) trades[trades.length-1].out = i; pos = -1; trades.push({dir:-1, in:i}); } }
+  }
+  const L = n-1;
+  let recAgo = null;
+  for (let k = 0; k < 5 && L-k >= 0; k++) if (sig[L-k]) { recAgo = k; break; }
+  const open = pos !== 0 ? trades[trades.length-1] : null;
+  const today = nyDay(t[L]); let prevC = null;
+  for (let i = L-1; i >= 0; i--) if (nyDay(t[i]) !== today) { prevC = c[i]; break; }
+  return {
+    t, o, h, l, c, vw, p, s6, sig, trades, pos, n,
+    sigNow: sig[L] || "", recAgo, recSig: recAgo != null ? sig[L-recAgo] : "",
+    close: c[L], dayChg: prevC ? c[L]/prevC - 1 : null, date: t[L], dist: c[L]/vw[L] - 1,
+    entry: open ? {ts: t[open.in], p: c[open.in]} : null,
+    ret: open ? open.dir*(c[L]/c[open.in] - 1) : null
+  };
+}
+function compute(){
+  const block = (DATA && DATA.d && DATA.d[ui.tf]) || {};
+  results = (DATA ? DATA.tickers : []).map(x => {
+    const u = {sym:x.s, sec:x.sec, name:x.name || x.s}, y = block[x.s];
+    if (!y) return Object.assign(u, {err:"Sin datos"});
+    if (y.err) return Object.assign(u, {err:y.err});
+    if (!y.c || y.c.length < SMA_N + 2) return Object.assign(u, {err:"Historial insuficiente"});
+    return Object.assign(u, analyze(y));
+  });
+  render();
+}
+
+function rank(r){ if (r.err) return 9; if (r.sigNow) return 0; if (r.recAgo != null) return 1; if (r.pos !== 0) return 2; return 3; }
+const sigSpan = s => '<span class="sig ' + (s === "COMPRA" ? "pos" : "neg") + '">' + s + '</span>';
+function rowHTML(r){
+  const name = '<span class="tk">' + esc(r.name) + '</span><span class="sec">' + esc(r.sym !== r.name ? r.sym + " · " + r.sec : r.sec) + '</span>';
+  const sel = ui.sel === r.sym ? " sel" : "";
+  if (r.err) return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td colspan="7" class="neg" style="white-space:normal">' + esc(r.err) + '</td></tr>';
+  const est = r.pos === 1 ? '<span class="pill L">LARGO</span>' : r.pos === -1 ? '<span class="pill S">CORTO</span>' : '<span class="mut">Sin señal</span>';
+  let sg = '<span class="mut">—</span>';
+  if (r.sigNow) sg = sigSpan(r.sigNow);
+  else if (r.recAgo != null) sg = '<span class="mut">' + esc(r.recSig) + ', hace ' + r.recAgo + (r.recAgo === 1 ? " vela" : " velas") + '</span>';
+  const ent = r.entry ? fmtDT(r.entry.ts) + '  <span class="mut">' + fmtP(r.entry.p) + '</span>' : '<span class="mut">—</span>';
+  return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td>' + fmtP(r.close) +
+    '</td><td class="' + cls(r.dayChg) + '">' + fmtPct(r.dayChg) + '</td><td>' + est + '</td><td>' + sg + '</td><td>' + ent +
+    '</td><td class="' + cls(r.ret) + '">' + fmtPct(r.ret) + '</td><td class="' + cls(r.dist) + '">' + fmtPct(r.dist) + '</td></tr>';
+}
+function detailHTML(r){
+  const closed = r.trades.filter(x => x.out != null).map(x => ({...x, ret: x.dir*(r.c[x.out]/r.c[x.in]-1)}));
+  const wins = closed.filter(x => x.ret > 0).length, sum = closed.reduce((a,x) => a + x.ret, 0);
+  const list = r.trades.slice(-10).reverse().map(x => {
+    const ret = x.out != null ? x.dir*(r.c[x.out]/r.c[x.in]-1) : x.dir*(r.c[r.n-1]/r.c[x.in]-1);
+    return '<tr><td>' + (x.dir === 1 ? '<span class="pill L">Largo</span>' : '<span class="pill S">Corto</span>') + '</td><td>' + fmtDT(r.t[x.in]) + ' <span class="mut">' + fmtP(r.c[x.in]) + '</span></td><td>' +
+      (x.out != null ? fmtDT(r.t[x.out]) + ' <span class="mut">' + fmtP(r.c[x.out]) + '</span>' : '<span class="mut">Abierta</span>') + '</td><td class="' + cls(ret) + '">' + fmtPct(ret) + '</td></tr>';
+  }).join("");
+  const vwTxt = ui.tf === "4h" ? "VWAP semanal" : "VWAP diario";
+  return '<tr class="drow"><td colspan="8"><div class="detail"><h2>' + esc(r.name) + '</h2><div class="mut" style="font-size:13px">' + esc(r.sym) + ' · ' + esc(r.sec) + ' · velas de ' + TFN[ui.tf] + ' · última ' + fmtDT(r.date) + ' (Londres)</div>' +
+    '<div class="zoom"><button id="zOut" aria-label="Alejar">−</button><button id="zIn" aria-label="Acercar">+</button><button id="zReset">Restablecer</button><span>Rueda o pellizco para zoom, arrastrar para mover</span></div>' +
+    '<canvas id="cv" aria-label="Gráfico de velas con SMA 6 y VWAP"></canvas>' +
+    '<div class="legend"><span><i style="background:var(--s6)"></i>SMA 6</span><span><i style="background:var(--vw)"></i>' + vwTxt + '</span><span><i style="background:var(--long)"></i>Compra</span><span><i style="background:var(--short)"></i>Venta</span></div>' +
+    '<div class="mut" style="font-size:13px;margin-bottom:8px">Periodo descargado (' + r.n + ' velas): ' + closed.length + ' operaciones cerradas, ' + (closed.length ? Math.round(wins/closed.length*100) : 0) + '% ganadoras, suma de resultados ' + fmtPct(closed.length ? sum : null) + '</div>' +
+    (list ? '<div class="tablebox"><table class="trades"><thead><tr><th>Tipo</th><th>Entrada</th><th>Salida</th><th>Resultado</th></tr></thead><tbody>' + list + '</tbody></table></div>' : '<div class="mut">Sin operaciones en el periodo descargado.</div>') +
+    '</div></td></tr>';
+}
 function render(){
- btns("tfs",["Todas",...TFS],tf,v=>tf=v);
- btns("dirs",["Todas","COMPRA","VENDE"],dir,v=>dir=v);
- if(!D)return;
- document.getElementById("upd").textContent="Actualizado: "+D.actualizado+(offline?" · sin conexión (datos guardados)":"");
- const s=D.senales.filter(x=>(tf==="Todas"||x.tf===tf)&&(dir==="Todas"||x.senal===dir)).slice().reverse();
- document.getElementById("sig").innerHTML=s.length?s.map(x=>`<tr><td>${x.hora}</td><td><b>${x.ticker}</b></td><td>${x.tf}</td><td class="${x.senal[0]}">${x.senal}</td><td>${x.precio}</td><td>${x.sma}</td><td>${x.vwap}</td></tr>`).join(""):`<tr><td colspan="7" class="mut">Sin señales</td></tr>`;
- const tk=Object.keys(D.estado).sort();
- document.getElementById("est").innerHTML="<tr><th>Ticker</th>"+TFS.map(t=>`<th>${t}</th>`).join("")+"</tr>"+
-  tk.map(k=>"<tr><td><b>"+k+"</b></td>"+TFS.map(t=>{const v=D.estado[k][t];
-   return `<td>${v?`<span class="dot ${v==="ARRIBA"?"A":"B"}"></span>`:"–"}</td>`}).join("")+"</tr>").join("");
+  const ok = results.filter(r => !r.err);
+  const nSig = ok.filter(r => r.sigNow).length, nRec = ok.filter(r => r.recAgo != null).length;
+  const nL = ok.filter(r => r.pos === 1).length, nS = ok.filter(r => r.pos === -1).length, nE = results.length - ok.length;
+  const st = [["sig", nSig, "Señal última vela"], ["rec", nRec, "Últimas 5 velas"], ["L", nL, "En largo"], ["S", nS, "En corto"]];
+  $("stats").innerHTML = DATA ? st.map(s => '<button class="stat" data-v="' + s[0] + '"><b>' + s[1] + '</b><small>' + s[2] + '</small></button>').join("") +
+    (nE ? '<div class="stat" style="cursor:default"><b class="neg">' + nE + '</b><small>Con error</small></div>' : "") : "";
+  document.querySelectorAll("#stats .stat[data-v]").forEach(b => b.onclick = () => setEstado(b.dataset.v));
+  const txt = ui.text.trim().toUpperCase();
+  let rows = results.filter(r => {
+    if (ui.sector !== "all" && r.sec !== ui.sector) return false;
+    if (txt && !r.sym.includes(txt) && !r.name.toUpperCase().includes(txt)) return false;
+    if (ui.estado === "sig") return !r.err && !!r.sigNow;
+    if (ui.estado === "rec") return !r.err && r.recAgo != null;
+    if (ui.estado === "L") return !r.err && r.pos === 1;
+    if (ui.estado === "S") return !r.err && r.pos === -1;
+    return true;
+  });
+  if (ui.sort) {
+    const val = sortVal[ui.sort];
+    rows.sort((a, b) => {
+      if (!!a.err !== !!b.err) return a.err ? 1 : -1;
+      const va = a.err ? null : val(a), vb = b.err ? null : val(b);
+      if (va == null && vb == null) return a.name.localeCompare(b.name);
+      if (va == null) return 1; if (vb == null) return -1;
+      const c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      return c * ui.dir || a.name.localeCompare(b.name);
+    });
+  } else rows.sort((a,b) => rank(a) - rank(b) || a.sym.localeCompare(b.sym));
+  document.querySelectorAll("#thead th").forEach(th => {
+    const on = th.dataset.k === ui.sort;
+    th.classList.toggle("on", on);
+    th.innerHTML = th.textContent.replace(/[▲▼]/g, "").trim() + (on ? '<span class="ar">' + (ui.dir === 1 ? "▲" : "▼") + '</span>' : "");
+  });
+  if (!DATA) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Sin datos todavía.</td></tr>'; return; }
+  if (!rows.length) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Ningún ticker cumple este filtro.</td></tr>'; return; }
+  let selR = null;
+  $("tb").innerHTML = rows.map(r => { let s = rowHTML(r); if (ui.sel === r.sym && !r.err) { s += detailHTML(r); selR = r; } return s; }).join("");
+  document.querySelectorAll("#tb tr.row").forEach(tr => tr.onclick = () => toggleDetail(tr.dataset.s));
+  if (selR) drawChart(selR);
 }
-async function load(){
- try{const r=await fetch("signals.json?t="+Date.now());if(!r.ok)throw 0;D=await r.json();offline=false;
-  try{localStorage.setItem("svwap",JSON.stringify(D))}catch(e){}}
- catch(e){try{const c=localStorage.getItem("svwap");if(c){D=JSON.parse(c);offline=true}}catch(_){}}
- render();
+const sortVal = {
+  tk: r => r.name.toUpperCase(), close: r => r.close, day: r => r.dayChg,
+  pos: r => r.pos === 1 ? 0 : r.pos === -1 ? 1 : 2,
+  sig: r => r.sigNow ? 0 : r.recAgo != null ? r.recAgo : null,
+  entry: r => r.entry ? r.entry.ts : null, ret: r => r.ret, vw: r => r.dist
+};
+const DESC = ["day","ret","close","entry","vw"];
+function setSort(k){
+  if (ui.sort !== k) { ui.sort = k; ui.dir = DESC.includes(k) ? -1 : 1; }
+  else if (ui.dir === (DESC.includes(k) ? -1 : 1)) ui.dir = -ui.dir;
+  else { ui.sort = null; ui.dir = 1; }
+  render();
 }
-load();setInterval(load,60000);
-</script></body></html>
+function toggleDetail(sym){
+  ui.sel = ui.sel === sym ? null : sym;
+  render();
+  if (ui.sel) { const tr = document.querySelector('#tb tr.row[data-s="' + CSS.escape(sym) + '"]'); if (tr) tr.scrollIntoView({behavior:"smooth", block:"start"}); }
+}
+function setEstado(v){ ui.estado = v; document.querySelectorAll("#segEstado button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); render(); }
+function setTF(v){ ui.tf = v; save("svwapTF", v); document.querySelectorAll("#segTF button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); showStatus(); compute(); }
+
+let CH = null;
+function drawChart(r){
+  const cv = $("cv"); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const key = ui.tf + "|" + r.sym, lastT = r.t[r.n-1];
+  if (VIEW.key !== key) VIEW = {key, n: r.n, N: Math.min(150, r.n), end: r.n - 1, lastT};
+  else if (VIEW.lastT !== lastT) { if (VIEW.end >= VIEW.n - 1) VIEW.end = r.n - 1; VIEW.n = r.n; VIEW.lastT = lastT; }
+  VIEW.N = Math.max(20, Math.min(r.n, Math.round(VIEW.N)));
+  VIEW.end = Math.max(VIEW.N - 1, Math.min(r.n - 1, Math.round(VIEW.end)));
+  const N = VIEW.N, en = VIEW.end, st = en - N + 1;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = st; i <= en; i++) for (const a of [r.h, r.l, r.s6, r.vw]) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+  const pad = (hi-lo)*0.08 || 1; lo -= pad; hi += pad;
+  const L = 8, R = 66, T = 12, B = 24, w = W-L-R, h = H-T-B, step = w/N;
+  const X = i => L + (i-st+0.5)*step, Y = v => T + (hi-v)/(hi-lo)*h;
+  g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8"; g.strokeStyle = "#18273f"; g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi-lo)*k/4, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(L+w, y); g.stroke(); g.fillText(fmtP(v), L+w+6, y+4); }
+  g.save(); g.strokeStyle = "rgba(125,142,168,.22)"; g.setLineDash([2, 4]);
+  for (let i = st+1; i <= en; i++) if (r.p[i] !== r.p[i-1]) { const x = X(i) - step/2; g.beginPath(); g.moveTo(x, T); g.lineTo(x, T+h); g.stroke(); }
+  g.restore();
+  g.fillStyle = "#7d8ea8";
+  for (const k of [0, 0.5, 1]) { const i = Math.round(st + k*(N-1)), tx = fmtDT(r.t[i]), tw = g.measureText(tx).width; g.fillText(tx, Math.min(Math.max(X(i) - tw/2, L), L+w-tw), H-7); }
+  const bw = Math.max(1, step*0.62);
+  for (let i = st; i <= en; i++) {
+    const col = r.c[i] >= r.o[i] ? "#2f9e74" : "#b04a55", x = X(i);
+    g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, Y(r.h[i])); g.lineTo(x, Y(r.l[i])); g.stroke();
+    const y1 = Y(Math.max(r.o[i], r.c[i])), y2 = Y(Math.min(r.o[i], r.c[i]));
+    g.fillRect(x - bw/2, y1, bw, Math.max(1, y2 - y1));
+  }
+  g.strokeStyle = "#ff9f1a"; g.lineWidth = 2; g.beginPath();
+  for (let i = st; i <= en; i++) { if (i === st || r.p[i] !== r.p[i-1]) g.moveTo(X(i), Y(r.vw[i])); else g.lineTo(X(i), Y(r.vw[i])); }
+  g.stroke();
+  g.strokeStyle = "#ffffff"; g.lineWidth = 1.4; g.beginPath(); let m = false;
+  for (let i = st; i <= en; i++) { if (r.s6[i] == null) { m = false; continue; } if (!m) { g.moveTo(X(i), Y(r.s6[i])); m = true; } else g.lineTo(X(i), Y(r.s6[i])); }
+  g.stroke();
+  for (const x of r.trades) {
+    if (x.in < st || x.in > en) continue;
+    const px = X(x.in);
+    g.fillStyle = x.dir === 1 ? "#3fd492" : "#ff6b7a"; g.beginPath();
+    if (x.dir === 1) { const py = Y(r.l[x.in]); g.moveTo(px, py+4); g.lineTo(px-6, py+14); g.lineTo(px+6, py+14); }
+    else { const py = Y(r.h[x.in]); g.moveTo(px, py-4); g.lineTo(px-6, py-14); g.lineTo(px+6, py-14); }
+    g.closePath(); g.fill();
+  }
+  CH = {r, g, cv, base: g.getImageData(0, 0, cv.width, cv.height), st, en, N, L, R, T, B, w, h, W, H, step, lo, hi, X, Y};
+  overlay(null, null);
+  if (!cv._bound) bindChart(cv);
+}
+function resetView(){ if (!CH) return; const r = CH.r; VIEW.N = Math.min(r.n, 150); VIEW.end = r.n - 1; drawChart(r); }
+function zoomAt(factor, frac){
+  if (!CH) return;
+  const {r, st, N} = CH, anchor = st + frac * N;
+  const nN = Math.max(20, Math.min(r.n, Math.round(N * factor)));
+  VIEW.N = nN; VIEW.end = Math.round(anchor - frac * nN + nN - 1);
+  drawChart(r);
+}
+function bindChart(cv){
+  cv._bound = true;
+  const pts = new Map();
+  let drag = null, pinch = null, lastTap = 0;
+  const local = e => { const rc = cv.getBoundingClientRect(); return {x: e.clientX - rc.left, y: e.clientY - rc.top}; };
+  const fracOf = x => Math.min(1, Math.max(0, (x - CH.L) / CH.w));
+  const cross = p => {
+    const {L, w, T, h, st, en, step} = CH;
+    if (p.x < L || p.x > L + w) { overlay(null, null); return; }
+    overlay(Math.min(en, Math.max(st, st + Math.floor((p.x - L) / step))), Math.min(T + h, Math.max(T, p.y)));
+  };
+  cv.addEventListener("pointerdown", e => {
+    if (!CH) return;
+    const p = local(e); pts.set(e.pointerId, p);
+    try { cv.setPointerCapture(e.pointerId); } catch(_) {}
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = {d: Math.max(20, Math.abs(a.x - b.x)), N: CH.N, end: CH.en, cx: (a.x + b.x) / 2}; drag = null; }
+    else if (e.pointerType === "mouse") drag = {x: p.x, end: CH.en, moved: false};
+    else { const now = Date.now(); if (now - lastTap < 300) { lastTap = 0; resetView(); return; } lastTap = now; cross(p); }
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!CH) return;
+    const p = local(e);
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, p);
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.max(20, Math.abs(a.x - b.x)), cx = (a.x + b.x) / 2, frac = fracOf(pinch.cx);
+      const nN = Math.max(20, Math.min(CH.r.n, Math.round(pinch.N * pinch.d / d)));
+      const anchor = (pinch.end - pinch.N + 1) + frac * pinch.N, shift = (cx - pinch.cx) / (CH.w / nN);
+      VIEW.N = nN; VIEW.end = Math.round(anchor - frac * nN + nN - 1 - shift);
+      drawChart(CH.r); return;
+    }
+    if (drag) { const dx = p.x - drag.x; if (Math.abs(dx) > 3) drag.moved = true; if (drag.moved) { VIEW.end = Math.round(drag.end - dx / CH.step); drawChart(CH.r); return; } }
+    cross(p);
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (e.pointerType === "mouse") drag = null; };
+  cv.addEventListener("pointerup", up);
+  cv.addEventListener("pointercancel", e => { up(e); overlay(null, null); });
+  cv.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") { drag = null; overlay(null, null); } });
+  cv.addEventListener("dblclick", resetView);
+  cv.addEventListener("wheel", e => {
+    if (!CH) return; e.preventDefault();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { VIEW.end = Math.round(CH.en + e.deltaX / CH.step / 2); drawChart(CH.r); return; }
+    zoomAt(e.deltaY > 0 ? 1.12 : 1/1.12, fracOf(local(e).x));
+  }, {passive:false});
+  cv.addEventListener("gesturestart", e => e.preventDefault());
+  const zi = $("zIn"), zo = $("zOut"), zr = $("zReset");
+  if (zi) zi.onclick = () => zoomAt(1/1.4, 1);
+  if (zo) zo.onclick = () => zoomAt(1.4, 1);
+  if (zr) zr.onclick = resetView;
+}
+function overlay(i, py){
+  if (!CH) return;
+  const {r, g, base, L, T, w, h, H, lo, hi, X} = CH;
+  g.putImageData(base, 0, 0);
+  g.font = "11px -apple-system, Helvetica, Arial, sans-serif";
+  const box = (txt, cx, cy, align) => {
+    const tw = g.measureText(txt).width + 10, bh = 18;
+    let bx = align === "center" ? cx - tw/2 : cx;
+    bx = Math.max(L, Math.min(bx, CH.W - tw - 1));
+    g.fillStyle = "#24385a"; g.fillRect(bx, cy - bh/2, tw, bh);
+    g.fillStyle = "#ffffff"; g.fillText(txt, bx + 5, cy + 4);
+  };
+  if (i != null) {
+    const x = X(i);
+    g.save(); g.strokeStyle = "rgba(170,186,210,.55)"; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + h); g.moveTo(L, py); g.lineTo(L + w, py); g.stroke(); g.restore();
+    box(fmtP(hi - (py - T)/h*(hi - lo)), L + w + 2, py, "left");
+    box(new Date(r.t[i]*1000).toLocaleString("es-ES",{timeZone:TZ, weekday:"short", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"}).replace(",", ""), x, H - 11, "center");
+  }
+  const k = i != null ? i : CH.en;
+  const ch = r.c[k] / (k > 0 ? r.c[k-1] : r.c[k]) - 1;
+  const rows = [
+    ["A " + fmtP(r.o[k]) + "  M " + fmtP(r.h[k]) + "  m " + fmtP(r.l[k]) + "  C " + fmtP(r.c[k]) + "  " + fmtPct(ch), "#9aabc4", "11px"],
+    ["SMA 6   " + (r.s6[k] == null ? "—" : fmtP(r.s6[k])), "#ffffff", "600 12px"],
+    ["VWAP   " + fmtP(r.vw[k]), "#ff9f1a", "600 12px"]
+  ];
+  if (r.sig[k]) rows.push([r.sig[k], r.sig[k] === "COMPRA" ? "#3fd492" : "#ff6b7a", "700 12px"]);
+  let bw = 0;
+  for (const [t, , f] of rows) { g.font = f + " -apple-system, Helvetica, Arial, sans-serif"; bw = Math.max(bw, g.measureText(t).width); }
+  const lh = 17, x0 = L + 4, y0 = T + 2;
+  g.fillStyle = "rgba(6,13,26,.78)"; g.fillRect(x0 - 4, y0, bw + 12, rows.length * lh + 6);
+  rows.forEach(([t, col, f], n) => { g.font = f + " -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = col; g.fillText(t, x0 + 2, y0 + 15 + n * lh); });
+}
+
+$("reload").onclick = () => loadData(false);
+document.querySelectorAll("#segTF button").forEach(b => { b.classList.toggle("on", b.dataset.v === ui.tf); b.onclick = () => setTF(b.dataset.v); });
+document.querySelectorAll("#thead th").forEach(th => th.onclick = () => setSort(th.dataset.k));
+document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
+$("fSector").onchange = e => { ui.sector = e.target.value; render(); };
+$("fText").oninput = e => { ui.text = e.target.value; render(); };
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (ui.sel) { const r = results.find(x => x.sym === ui.sel); if (r && !r.err) drawChart(r); } }, 150); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && Date.now() - lastLoad > 120000) loadData(true); });
+setInterval(() => { if (document.visibilityState === "visible") loadData(true); }, 120000);
+window.addEventListener("online", () => loadData(true));
+loadData(false);
+if ("serviceWorker" in navigator) window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+</script>
+</body>
+</html>
