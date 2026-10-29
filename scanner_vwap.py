@@ -1,30 +1,37 @@
 import os, json
 import numpy as np, pandas as pd, yfinance as yf, requests
 
-# ===== UNIVERSO (editable) =====
-TICKERS = [
-    # Índices vía ETF (los índices no traen volumen intradía en Yahoo)
-    "SPY", "QQQ", "DIA",
-    # Energía
-    "XOM", "CVX", "COP", "EOG", "SLB", "OXY", "PSX", "MPC",
-    # Tecnología
-    "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "GOOGL", "META", "AMZN", "ORCL", "CRM", "ADBE", "QCOM", "CSCO",
-    # Health care
-    "UNH", "JNJ", "LLY", "ABBV", "MRK", "PFE", "TMO", "ABT", "AMGN", "GILD", "ISRG",
-]
+# ===== UNIVERSO (editable) — ticker: (nombre, sector) =====
+TICKERS = {
+    "SPY": ("S&P 500 (ETF)", "Índices"), "QQQ": ("Nasdaq 100 (ETF)", "Índices"), "DIA": ("Dow Jones (ETF)", "Índices"),
+    "XOM": ("Exxon Mobil", "Energía"), "CVX": ("Chevron", "Energía"), "COP": ("ConocoPhillips", "Energía"),
+    "EOG": ("EOG Resources", "Energía"), "SLB": ("SLB", "Energía"), "OXY": ("Occidental", "Energía"),
+    "PSX": ("Phillips 66", "Energía"), "MPC": ("Marathon Petroleum", "Energía"),
+    "AAPL": ("Apple", "Tecnología"), "MSFT": ("Microsoft", "Tecnología"), "NVDA": ("Nvidia", "Tecnología"),
+    "AVGO": ("Broadcom", "Tecnología"), "AMD": ("AMD", "Tecnología"), "GOOGL": ("Alphabet", "Tecnología"),
+    "META": ("Meta", "Tecnología"), "AMZN": ("Amazon", "Tecnología"), "ORCL": ("Oracle", "Tecnología"),
+    "CRM": ("Salesforce", "Tecnología"), "ADBE": ("Adobe", "Tecnología"), "QCOM": ("Qualcomm", "Tecnología"),
+    "CSCO": ("Cisco", "Tecnología"),
+    "UNH": ("UnitedHealth", "Salud"), "JNJ": ("Johnson & Johnson", "Salud"), "LLY": ("Eli Lilly", "Salud"),
+    "ABBV": ("AbbVie", "Salud"), "MRK": ("Merck", "Salud"), "PFE": ("Pfizer", "Salud"),
+    "TMO": ("Thermo Fisher", "Salud"), "ABT": ("Abbott", "Salud"), "AMGN": ("Amgen", "Salud"),
+    "GILD": ("Gilead", "Salud"), "ISRG": ("Intuitive Surgical", "Salud"),
+}
 SMA_N = 6
 NY, LON = "America/New_York", "Europe/London"
-CFG = {  # tf: (intervalo Yahoo, periodo, minutos, modo VWAP D=diario W=semanal)
-    "5m":  ("5m",  "5d",  5,  "D"),
-    "15m": ("15m", "5d",  15, "D"),
-    "30m": ("30m", "10d", 30, "D"),
-    "1h":  ("1h",  "1mo", 60, "D"),
+# tf: (intervalo Yahoo, periodo, minutos, VWAP D=diario W=semanal, velas que se guardan)
+CFG = {
+    "5m":  ("5m",  "5d",  5,  "D", 300),
+    "15m": ("15m", "10d", 15, "D", 200),
+    "30m": ("30m", "20d", 30, "D", 200),
+    "1h":  ("1h",  "3mo", 60, "D", 200),
 }
+KEEP_4H = 120
 TOKEN, CHAT = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
 NOW = pd.Timestamp.now(tz=NY)
 
 
-def load(p, default):
+def load_json(p, default):
     try:
         with open(p) as f:
             return json.load(f)
@@ -34,25 +41,26 @@ def load(p, default):
 
 def get(raw, t):
     try:
-        d = raw[t][["High", "Low", "Close", "Volume"]].dropna().copy()
+        d = raw[t][["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
     except KeyError:
         return None
+    d = d[d.Volume > 0]
     if d.empty:
         return None
     d.index = d.index.tz_convert(NY)
-    return d[d.Volume > 0]
+    return d
 
 
 def add_vwap(d, mode):
     key = d.index.strftime("%Y-%m-%d" if mode == "D" else "%G-%V")
     tp = (d.High + d.Low + d.Close) / 3
-    d["P"] = key
+    d["P"] = pd.factorize(key)[0]
     d["VWAP"] = (tp * d.Volume).groupby(key).cumsum() / d.Volume.groupby(key).cumsum()
     return d
 
 
 def closed(d, minutes):
-    """Solo velas ya cerradas (la última vela de la sesión cierra a las 16:00 NY)."""
+    """Solo velas cerradas (la última de la sesión cierra a las 16:00 NY)."""
     ends = d.index + pd.Timedelta(minutes=minutes)
     cap = d.index.normalize() + pd.Timedelta(hours=16)
     ends = ends.where(ends < cap, cap)
@@ -60,47 +68,38 @@ def closed(d, minutes):
 
 
 def to_4h(d):
-    """Agrupa velas de 1H en bloques 09:30-13:30 y 13:30-16:00 NY."""
+    """Bloques 09:30-13:30 y 13:30-16:00 NY construidos desde 1H."""
     mins = d.index.hour * 60 + d.index.minute
     key = [f"{a}_{int(b)}" for a, b in zip(d.index.strftime("%Y-%m-%d"), mins >= 810)]
     o = d.assign(T=d.index).groupby(key, sort=False).agg(
-        T=("T", "first"), Close=("Close", "last"), VWAP=("VWAP", "last"), P=("P", "last")
+        T=("T", "first"), Open=("Open", "first"), High=("High", "max"), Low=("Low", "min"),
+        Close=("Close", "last"), VWAP=("VWAP", "last"), P=("P", "last"),
     ).set_index("T")
     m = o.index.hour * 60 + o.index.minute
     end = o.index.normalize() + pd.to_timedelta(np.where(m < 810, 810, 960), unit="m")
     return o[end <= NOW]
 
 
-def check(t, tf, d, state, nuevas, estado):
-    d = d.dropna(subset=["VWAP"]).copy()
-    if len(d) < SMA_N + 1:
-        return
-    d["SMA"] = d.Close.rolling(SMA_N).mean()
-    a, b = d.iloc[-2], d.iloc[-1]
-    if pd.isna(a.SMA):
-        return
-    estado.setdefault(t, {})[tf] = "ARRIBA" if b.SMA > b.VWAP else "ABAJO"
-    if a.P != b.P:  # cruce provocado por el reinicio del VWAP: se ignora
-        return
-    sig = None
-    if a.SMA <= a.VWAP and b.SMA > b.VWAP:
-        sig = "COMPRA"
-    elif a.SMA >= a.VWAP and b.SMA < b.VWAP:
-        sig = "VENDE"
-    if not sig:
-        return
-    ts = d.index[-1]
-    k = f"{t}|{tf}"
-    if state.get(k) == str(ts):
-        return
-    state[k] = str(ts)
-    nuevas.append({
-        "ticker": t, "tf": tf, "senal": sig,
-        "hora": ts.tz_convert(LON).strftime("%d/%m %H:%M"),
-        "precio": round(float(b.Close), 2),
-        "sma": round(float(b.SMA), 2),
-        "vwap": round(float(b.VWAP), 2),
-    })
+def pack(d, n):
+    d = d.dropna(subset=["VWAP"]).tail(n)
+    if len(d) < SMA_N + 2:
+        return {"err": "Historial insuficiente"}
+    r2 = lambda s: [round(float(x), 2) for x in s]
+    return {"t": [int(x.timestamp()) for x in d.index], "o": r2(d.Open), "h": r2(d.High),
+            "l": r2(d.Low), "c": r2(d.Close), "vw": r2(d.VWAP), "p": [int(x) for x in d.P]}
+
+
+def last_signal(x):
+    c, vw, p = x["c"], x["vw"], x["p"]
+    if len(c) < SMA_N + 1 or p[-1] != p[-2]:   # cruce por reinicio del VWAP: no cuenta
+        return None
+    s1 = sum(c[-SMA_N:]) / SMA_N
+    s0 = sum(c[-SMA_N - 1:-1]) / SMA_N
+    if s0 <= vw[-2] and s1 > vw[-1]:
+        return "COMPRA", s1
+    if s0 >= vw[-2] and s1 < vw[-1]:
+        return "VENDE", s1
+    return None
 
 
 def send(text):
@@ -112,42 +111,55 @@ def send(text):
 
 
 def main():
-    state = load("state.json", {})
-    hist = load("signals.json", {}).get("senales", [])
-    estado, nuevas, raw1h = {}, [], None
+    syms = list(TICKERS)
+    state = load_json("state.json", {})
+    out = {"updated": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"), "sma": SMA_N,
+           "tickers": [{"s": k, "name": v[0], "sec": v[1]} for k, v in TICKERS.items()], "d": {}}
+    raw1h = None
 
-    for tf, (iv, per, mins, mode) in CFG.items():
-        raw = yf.download(TICKERS, interval=iv, period=per, group_by="ticker",
+    for tf, (iv, per, mins, mode, keep) in CFG.items():
+        raw = yf.download(syms, interval=iv, period=per, group_by="ticker",
                           auto_adjust=False, prepost=False, progress=False, threads=True)
         if tf == "1h":
             raw1h = raw
-        for t in TICKERS:
-            d = get(raw, t)
-            if d is not None:
-                check(t, tf, closed(add_vwap(d, mode), mins), state, nuevas, estado)
+        out["d"][tf] = {}
+        for s in syms:
+            d = get(raw, s)
+            out["d"][tf][s] = pack(closed(add_vwap(d, mode), mins), keep) if d is not None else {"err": "Sin datos de Yahoo"}
 
-    # 4H con VWAP semanal, construido desde 1H
-    for t in TICKERS:
-        d = get(raw1h, t)
-        if d is not None:
-            check(t, "4h", to_4h(closed(add_vwap(d, "W"), 60)), state, nuevas, estado)
+    out["d"]["4h"] = {}
+    for s in syms:
+        d = get(raw1h, s)
+        out["d"]["4h"][s] = pack(to_4h(closed(add_vwap(d, "W"), 60)), KEEP_4H) if d is not None else {"err": "Sin datos de Yahoo"}
+
+    nuevas = []
+    for tf, block in out["d"].items():
+        for s, x in block.items():
+            if "err" in x:
+                continue
+            r = last_signal(x)
+            if not r:
+                continue
+            k = f"{s}|{tf}"
+            if state.get(k) == x["t"][-1]:
+                continue
+            state[k] = x["t"][-1]
+            hora = pd.Timestamp(x["t"][-1], unit="s", tz="UTC").tz_convert(LON).strftime("%d/%m %H:%M")
+            nuevas.append(f"{'🟢' if r[0] == 'COMPRA' else '🔴'} {r[0]} · {s} · {tf}\n"
+                          f"Precio {x['c'][-1]} | SMA6 {round(r[1], 2)} | VWAP {x['vw'][-1]}\n"
+                          f"Vela {hora} (Londres)")
 
     if nuevas and TOKEN and CHAT:
         msg = ""
-        for s in nuevas:
-            ico = "🟢" if s["senal"] == "COMPRA" else "🔴"
-            line = (f"{ico} {s['senal']} · {s['ticker']} · {s['tf']}\n"
-                    f"Precio {s['precio']} | SMA6 {s['sma']} | VWAP {s['vwap']}\n"
-                    f"Vela {s['hora']} (Londres)")
+        for line in nuevas:
             if len(msg) + len(line) > 3800:
                 send(msg); msg = ""
             msg += line + "\n\n"
         if msg:
             send(msg)
 
-    with open("signals.json", "w") as f:
-        json.dump({"actualizado": NOW.tz_convert(LON).strftime("%d/%m/%Y %H:%M"),
-                   "senales": (hist + nuevas)[-300:], "estado": estado}, f, ensure_ascii=False)
+    with open("data.json", "w") as f:
+        json.dump(out, f, separators=(",", ":"), ensure_ascii=False)
     with open("state.json", "w") as f:
         json.dump(state, f)
     print(f"{len(nuevas)} señales nuevas")
