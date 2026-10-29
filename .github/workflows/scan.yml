@@ -1,7 +1,7 @@
 name: Scanner VWAP
 on:
   schedule:
-    - cron: "*/5 13-21 * * 1-5"   # cada 5 min, sesión USA (cubre horario de verano e invierno)
+    - cron: "*/5 13-21 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: write
@@ -17,12 +17,19 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install yfinance pandas numpy requests
-      - run: python scanner_vwap.py
+      - name: Recuperar estado anterior
+        run: git fetch --depth=1 origin data && git show origin/data:state.json > state.json || echo "{}" > state.json
+      - name: Escanear
+        run: python scanner_vwap.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      - run: |
-          git config user.name "scanner-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add signals.json state.json
-          git diff --cached --quiet || (git commit -m "scan" && git push)
+      - name: Publicar datos en la rama data (sin historial)
+        run: |
+          mkdir pub && cp data.json state.json pub/ && cd pub
+          git init -q -b data
+          git add -A
+          git -c user.name="scanner-bot" -c user.email="bot@users.noreply.github.com" commit -qm "datos $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
